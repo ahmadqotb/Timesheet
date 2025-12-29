@@ -20,17 +20,15 @@ class TimesheetGenerator {
             if (fs.existsSync(logoPath)) {
                 return `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
             }
-        } catch (error) {
-            console.log('Logo.png not found');
-        }
+        } catch (e) {}
         return null;
     }
 
     formatDateLocal(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     }
 
     async processExcel() {
@@ -48,16 +46,10 @@ class TimesheetGenerator {
             if (!employeeName || !dateValue) return;
 
             let date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-            if (isNaN(date.getTime())) return;
-            if (date.getMonth() + 1 !== this.month || date.getFullYear() !== this.year) return;
+            if (isNaN(date.getTime()) || date.getMonth() + 1 !== this.month || date.getFullYear() !== this.year) return;
 
             if (!this.employeeData[employeeName]) this.employeeData[employeeName] = [];
-            this.employeeData[employeeName].push({
-                projectCode,
-                projectName,
-                date,
-                dayOfWeek: date.getDay()
-            });
+            this.employeeData[employeeName].push({ projectCode, projectName, date, dayOfWeek: date.getDay() });
         });
 
         this.calculateSummaries();
@@ -69,72 +61,37 @@ class TimesheetGenerator {
         for (const employeeName in this.employeeData) {
             const entries = this.employeeData[employeeName];
             const workedDates = new Set();
-            let workedFridays = 0;
-            let workedSaturdays = 0;
-
-            entries.forEach(e => {
-                workedDates.add(this.formatDateLocal(e.date));
-                if (e.dayOfWeek === 5) workedFridays++;
-                if (e.dayOfWeek === 6) workedSaturdays++;
-            });
-
-            const hasSatFriOff = this.satFriEmployees.includes(employeeName);
-            const totalWorkedDays = workedDates.size;
+            entries.forEach(e => workedDates.add(this.formatDateLocal(e.date)));
             
-            // Basic logic for absence (customizable)
+            const totalWorkedDays = workedDates.size;
             let absence = daysInMonth - totalWorkedDays;
+            
             this.employeeSummaries[employeeName] = {
                 totalAbsentDays: Math.max(0, absence),
-                totalPayrunDays: 30 - Math.max(0, absence),
-                workedFridays,
-                workedSaturdays,
-                hasSatFriOff
+                totalPayrunDays: 30 - Math.max(0, absence)
             };
         }
     }
 
-    generateHTML(employeeName, entries, summary) {
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        let rows = entries.map(e => `
+    generateHTML(name, entries, summary) {
+        const rows = entries.map(e => `
             <tr>
                 <td>${this.formatDateLocal(e.date)}</td>
                 <td>${e.projectCode}</td>
                 <td>${e.projectName}</td>
                 <td>Worked</td>
-            </tr>
-        `).join('');
+            </tr>`).join('');
 
-        return `
-            <html>
-                <style>
-                    body { font-family: sans-serif; padding: 20px; font-size: 12px; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-                    th { background: #f4f4f4; }
-                    .header { display: flex; justify-content: space-between; }
-                </style>
-                <body>
-                    <div class="header">
-                        <h1>Timesheet: ${employeeName}</h1>
-                        ${this.logoBase64 ? `<img src="${this.logoBase64}" width="100">` : ''}
-                    </div>
-                    <p>Month: ${monthNames[this.month-1]} ${this.year}</p>
-                    <table>
-                        <tr><th>Absent Days</th><td>${summary.totalAbsentDays}</td></tr>
-                        <tr><th>Payrun Days</th><td>${summary.totalPayrunDays}</td></tr>
-                    </table>
-                    <table>
-                        <thead><tr><th>Date</th><th>Code</th><th>Project</th><th>Status</th></tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </body>
-            </html>`;
+        return `<html><style>body{font-family:sans-serif;font-size:12px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px;}</style>
+                <body><h1>Timesheet: ${name}</h1><p>Absent: ${summary.totalAbsentDays}</p>
+                <table><thead><tr><th>Date</th><th>Code</th><th>Project</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody></table></body></html>`;
     }
 
     async generatePDFs(outputDir, progressCallback) {
         const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
 
@@ -142,20 +99,16 @@ class TimesheetGenerator {
             const employees = Object.keys(this.employeeData);
             for (let i = 0; i < employees.length; i++) {
                 const name = employees[i];
-                if (progressCallback) progressCallback({ 
-                    progress: Math.round(((i + 1) / employees.length) * 100), 
-                    status: `Generating: ${name}` 
-                });
+                if (progressCallback) progressCallback({ progress: Math.round(((i+1)/employees.length)*100), status: `Printing: ${name}` });
 
                 const page = await browser.newPage();
-                const html = this.generateHTML(name, this.employeeData[name], this.employeeSummaries[name]);
-                await page.setContent(html, { waitUntil: 'networkidle0' });
-                await page.pdf({
-                    path: path.join(outputDir, `${name}_Timesheet.pdf`),
-                    format: 'A4',
-                    printBackground: true
-                });
-                await page.close();
+                try {
+                    const html = this.generateHTML(name, this.employeeData[name], this.employeeSummaries[name]);
+                    await page.setContent(html, { waitUntil: 'networkidle0' });
+                    await page.pdf({ path: path.join(outputDir, `${name}_Timesheet.pdf`), format: 'A4', printBackground: true });
+                } finally {
+                    await page.close();
+                }
             }
         } finally {
             await browser.close();
