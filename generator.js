@@ -32,21 +32,16 @@ class TimesheetGenerator {
                 });
             }
         });
-        this.calculateSummaries();
-        return Object.keys(this.employeeData).length;
-    }
-
-    calculateSummaries() {
         for (const name in this.employeeData) {
-            const worked = new Set(this.employeeData[name].map(e => e.date.toDateString())).size;
-            this.employeeSummaries[name] = { workedDays: worked };
+            this.employeeSummaries[name] = { workedDays: this.employeeData[name].length };
         }
+        return Object.keys(this.employeeData).length;
     }
 
     async generatePDFs(outputDir, progressCallback) {
         const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome',
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
 
@@ -54,12 +49,11 @@ class TimesheetGenerator {
             const employees = Object.keys(this.employeeData);
             for (let i = 0; i < employees.length; i++) {
                 const name = employees[i];
-                if (progressCallback) progressCallback({ progress: Math.round(((i + 1) / employees.length) * 100), status: `Processing: ${name}` });
-
+                if (progressCallback) progressCallback({ progress: Math.round(((i + 1) / employees.length) * 100), status: `Printing: ${name}` });
                 const page = await browser.newPage();
-                const html = `<html><body><h1>Timesheet: ${name}</h1><p>Worked Days: ${this.employeeSummaries[name].workedDays}</p></body></html>`;
+                const html = `<html><body><h1>${name}</h1></body></html>`;
                 await page.setContent(html);
-                await page.pdf({ path: path.join(outputDir, `${name}_Timesheet.pdf`), format: 'A4' });
+                await page.pdf({ path: path.join(outputDir, `${name}.pdf`), format: 'A4' });
                 await page.close();
             }
         } finally {
