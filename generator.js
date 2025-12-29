@@ -441,9 +441,9 @@ class TimesheetGenerator {
             fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        const browser = await puppeteer.launch({
+       const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+            executablePath: '/usr/bin/google-chrome',
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
 
