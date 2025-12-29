@@ -1,0 +1,35 @@
+[phases.setup]
+nixPkgs = [
+    "chromium",
+    "libuuid",
+    "libxkbcommon",
+    "libdrm",
+    "mesa",
+    "alsa-lib",
+    "atk",
+    "at-spi2-atk",
+    "at-spi2-core",
+    "cairo",
+    "cups",
+    "dbus",
+    "expat",
+    "fontconfig",
+    "freetype",
+    "gdk-pixbuf",
+    "glib",
+    "gtk3",
+    "nspr",
+    "nss",
+    "pango",
+    "xorg.libX11",
+    "xorg.libXcomposite",
+    "xorg.libXdamage",
+    "xorg.libXext",
+    "xorg.libXfixes",
+    "xorg.libXrandr",
+    "xorg.libxcb"
+]
+
+[variables]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/nix/var/nix/profiles/default/bin/chromium"

@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Timesheet & Reports Generator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .header { background: #e8e9ed; padding: 20px 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; }
+        .header-logo { height: 60px; width: auto; }
+        .header-text { flex: 1; }
+        .header-text h1 { color: #333; font-size: 24px; margin-bottom: 4px; }
+        .header-text p { color: #666; font-size: 14px; }
+        .container { max-width: 900px; margin: 30px auto; padding: 0 20px; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 30px; margin-bottom: 20px; }
+        .tabs { display: flex; gap: 0; margin-bottom: 30px; border-bottom: 2px solid #e0e0e0; flex-wrap: wrap; }
+        .tab { padding: 14px 16px; background: none; border: none; border-bottom: 3px solid transparent; color: #666; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+        .tab:hover { color: #667eea; background: #f8f9ff; }
+        .tab.active { color: #667eea; border-bottom-color: #667eea; background: #f8f9ff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .upload-area { border: 2px dashed #d0d0d0; border-radius: 10px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s ease; margin-bottom: 20px; background: #fafafa; position: relative; }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; cursor: pointer; }
+        .upload-icon { font-size: 42px; margin-bottom: 12px; }
+        .upload-text { font-size: 16px; color: #333; font-weight: 600; margin-bottom: 6px; }
+        .upload-hint { font-size: 13px; color: #999; }
+        .file-name { display: none; background: #e8f5e9; padding: 14px; border-radius: 8px; margin-bottom: 20px; color: #2e7d32; font-weight: 600; text-align: center; border: 1px solid #c8e6c9; }
+        .file-upload-group { margin: 18px 0; }
+        .file-upload-group label { display: block; color: #333; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+        .file-input-wrapper { position: relative; display: inline-block; width: 100%; }
+        .file-input-button { width: 100%; padding: 12px 16px; background: #fafafa; border: 2px solid #d0d0d0; border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s ease; font-size: 14px; color: #666; }
+        .file-input-button:hover { border-color: #667eea; background: #f8f9ff; }
+        .file-input-button.has-file { color: #2e7d32; background: #e8f5e9; border-color: #81c784; }
+        .month-input { margin: 20px 0; }
+        .month-input label { display: block; color: #333; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+        .month-input input { width: 100%; padding: 12px; border: 2px solid #d0d0d0; border-radius: 8px; font-size: 15px; transition: all 0.2s ease; background: #fafafa; }
+        .month-input input:focus { outline: none; border-color: #667eea; background: white; }
+        .employee-selection { margin-top: 25px; }
+        .employee-selection > label { display: block; color: #333; font-weight: 600; margin-bottom: 10px; font-size: 15px; }
+        .search-box { width: 100%; padding: 10px 12px; border: 2px solid #d0d0d0; border-radius: 8px 8px 0 0; font-size: 14px; background: white; transition: border-color 0.2s ease; }
+        .search-box:focus { outline: none; border-color: #667eea; }
+        .employee-checkboxes { max-height: 200px; overflow-y: auto; border: 2px solid #d0d0d0; border-top: none; border-radius: 0 0 8px 8px; padding: 12px; background: #fafafa; }
+        .employee-checkbox { display: flex; align-items: center; padding: 10px; margin-bottom: 6px; background: white; border-radius: 6px; transition: background 0.2s ease; border: 1px solid #e0e0e0; }
+        .employee-checkbox:hover { background: #f8f9ff; }
+        .employee-checkbox.hidden { display: none; }
+        .employee-checkbox input[type="checkbox"] { width: 18px; height: 18px; margin-right: 12px; cursor: pointer; }
+        .employee-checkbox label { cursor: pointer; flex: 1; font-size: 14px; color: #333; }
+        .generate-btn { width: 100%; padding: 14px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: none; margin-top: 20px; }
+        .generate-btn:hover:not(:disabled) { background: #5568d3; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+        .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .generate-btn.all-in-one { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .generate-btn.all-in-one:hover:not(:disabled) { background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%); }
+        .progress-container { margin-top: 25px; display: none; }
+        .progress-bar { width: 100%; height: 28px; background: #e0e0e0; border-radius: 14px; overflow: hidden; position: relative; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 13px; }
+        .status-message { margin-top: 12px; text-align: center; color: #555; font-weight: 600; font-size: 14px; }
+        .success-message, .error-message { margin-top: 20px; padding: 16px; border-radius: 8px; display: none; font-size: 14px; }
+        .success-message { background: #e8f5e9; border: 1px solid #81c784; color: #2e7d32; }
+        .error-message { background: #ffebee; border: 1px solid #e57373; color: #c62828; }
+        .download-link { display: inline-block; margin-top: 12px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: all 0.2s ease; font-size: 14px; }
+        .download-link:hover { background: #5568d3; transform: translateY(-1px); }
+        .reset-btn { width: 100%; padding: 12px; background: #f5f5f5; color: #555; border: 2px solid #d0d0d0; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 15px; transition: all 0.2s ease; display: none; }
+        .reset-btn:hover { background: #e0e0e0; border-color: #999; }
+        .no-results { text-align: center; padding: 20px; color: #999; font-style: italic; display: none; }
+        .selected-employees-badge { background: #e8f5e9; border: 2px solid #81c784; border-radius: 8px; padding: 12px 16px; margin: 15px 0; display: none; color: #2e7d32; font-weight: 600; font-size: 14px; }
+        .selected-employees-badge .count { background: #2e7d32; color: white; padding: 2px 8px; border-radius: 12px; font-size: 13px; margin-left: 8px; }
+        .selected-employees-list { margin-top: 8px; padding-left: 20px; font-weight: normal; font-size: 13px; line-height: 1.6; }
+        .selected-employees-list li { margin: 4px 0; }
+        .info-box { background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; padding: 14px; margin-bottom: 20px; color: #1565c0; font-size: 13px; line-height: 1.5; }
+        .info-box strong { display: block; margin-bottom: 6px; font-size: 14px; }
+        .info-box.highlight { background: linear-gradient(135deg, #e8f5e9 0%, #e3f2fd 100%); border: 2px solid #81c784; }
+        .report-list { margin-top: 10px; margin-left: 20px; }
+        .report-list li { margin: 6px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="Logo.png" alt="Company Logo" class="header-logo">
+        <div class="header-text">
+            <h1>Employee Timesheet & Reports Generator</h1>
+            <p>Generate professional PDF timesheets, food allowance reports, and absence tracking</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="all-in-one">📦 All in One</button>
+                <button class="tab" data-tab="absence">📋 Who's Absent</button>
+                <button class="tab" data-tab="validation">🔍 Data Validation</button>
+                <button class="tab" data-tab="project-summary">📈 Project Summary</button>
+                <button class="tab" data-tab="food-allowance">🍽️ Food Allowance</button>
+                <button class="tab" data-tab="timesheets">📊 Timesheet PDFs</button>
+            </div>
+
+            <!-- Tab 0: All in One -->
+            <div id="all-in-one-tab" class="tab-content active">
+                <div class="info-box highlight">
+                    <strong>📦 All in One - Generate All Reports</strong>
+                    Upload your files once and generate all 5 reports in a single click:
+                    <ul class="report-list">
+                        <li>📋 Absence Report (Excel)</li>
+                        <li>🔍 Data Validation Report (Excel)</li>
+                        <li>📈 Project Summary Report (Excel)</li>
+                        <li>🍽️ Food Allowance Report (Excel)</li>
+                        <li>📊 Timesheet PDFs (for each employee)</li>
+                    </ul>
+                </div>
+
+                <div class="file-upload-group">
+                    <label>📄 Timesheet Excel File:</label>
+                    <div class="file-input-wrapper">
+                        <button class="file-input-button" id="allTimesheetBtn">Choose file...</button>
+                        <input type="file" id="allTimesheetInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="file-upload-group">
+                    <label>📋 Project Policies Excel File:</label>
+                    <div class="file-input-wrapper">
+                        <button class="file-input-button" id="allProjectPoliciesBtn">Choose file...</button>
+                        <input type="file" id="allProjectPoliciesInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="file-upload-group">
+                    <label>👥 Employee Food Policies Excel File:</label>
+                    <div class="file-input-wrapper">
+                        <button class="file-input-button" id="allEmployeePoliciesBtn">Choose file...</button>
+                        <input type="file" id="allEmployeePoliciesInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="month-input">
+                    <label for="monthYearAll">Select Month & Year:</label>
+                    <input type="month" id="monthYearAll" required>
+                </div>
+
+                <div class="employee-selection" id="employeeSelectionAll" style="display: none;">
+                    <label>Select employees with Saturday + Friday off:</label>
+                    <input type="text" class="search-box" id="searchBoxAll" placeholder="🔍 Search employees...">
+                    <div id="employeeCheckboxesAll" class="employee-checkboxes"></div>
+                    <div class="no-results" id="noResultsAll">No employees found</div>
+                </div>
+
+                <div class="selected-employees-badge" id="selectedBadgeAll">
+                    ✓ Selected Sat+Fri Employees: <span class="count" id="selectedCountAll">0</span>
+                    <ul class="selected-employees-list" id="selectedListAll"></ul>
+                </div>
+
+                <button class="generate-btn all-in-one" id="generateAllBtn" style="display: none;">🚀 Generate All Reports</button>
+
+                <div class="progress-container" id="progressContainerAll">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFillAll">0%</div>
+                    </div>
+                    <div class="status-message" id="statusMessageAll">Processing...</div>
+                </div>
+
+                <div class="success-message" id="successMessageAll"></div>
+                <div class="error-message" id="errorMessageAll"></div>
+
+                <button class="reset-btn" id="resetBtnAll">Start Over</button>
+            </div>
+
+            <!-- Tab 1: Timesheet PDFs -->
+            <div id="timesheets-tab" class="tab-content">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Click to upload or drag & drop</div>
+                    <div class="upload-hint">Timesheet Excel file (.xlsx, .xls)</div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls">
+                </div>
+                <div class="file-name" id="fileName"></div>
+                <div class="month-input">
+                    <label for="monthYear">Select Month & Year:</label>
+                    <input type="month" id="monthYear" required>
+                </div>
+                <div class="employee-selection" id="employeeSelection" style="display: none;">
+                    <label>Select employees with Saturday + Friday off:</label>
+                    <input type="text" class="search-box" id="searchBox1" placeholder="🔍 Search employees...">
+                    <div id="employeeCheckboxes" class="employee-checkboxes"></div>
+                    <div class="no-results" id="noResults1">No employees found</div>
+                </div>
+                <div class="selected-employees-badge" id="selectedBadge1">
+                    ✓ Selected Sat+Fri Employees: <span class="count" id="selectedCount1">0</span>
+                    <ul class="selected-employees-list" id="selectedList1"></ul>
+                </div>
+                <button class="generate-btn" id="generateBtn">Generate PDFs</button>
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFill">0%</div></div>
+                    <div class="status-message" id="statusMessage">Processing...</div>
+                </div>
+                <div class="success-message" id="successMessage"></div>
+                <div class="error-message" id="errorMessage"></div>
+                <button class="reset-btn" id="resetBtn">Upload Another File</button>
+            </div>
+
+            <!-- Tab 2: Food Allowance Report -->
+            <div id="food-allowance-tab" class="tab-content">
+                <div class="file-upload-group">
+                    <label>📄 Timesheet Excel File:</label>
+                    <div class="file-input-wrapper">
+                        <button class="file-input-button" id="timesheetBtn">Choose file...</button>
+                        <input type="file" id="timesheetInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                </div>
+                <div class="file-upload-group">
+                    <label>📋 Project Policies Excel File:</label>
+                    <div class="file-input-wrapper">
+                        <button class="file-input-button" id="projectPoliciesBtn">Choose file...</button>
+                        <input type="file" id="projectPoliciesInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                </div>
+                <div class="file-upload-group">
+                    <label>👥 Employee Food Policies Excel File:</label>
+                    <div class="file-input-wrapper">
+                        <button class="file-input-button" id="employeePoliciesBtn">Choose file...</button>
+                        <input type="file" id="employeePoliciesInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                </div>
+                <div class="month-input">
+                    <label for="monthYearFood">Select Month & Year:</label>
+                    <input type="month" id="monthYearFood" required>
+                </div>
+                <button class="generate-btn" id="generateFoodBtn" style="display: block;">Generate Food Allowance Report</button>
+                <div class="progress-container" id="progressContainerFood">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFillFood">0%</div></div>
+                    <div class="status-message" id="statusMessageFood">Processing...</div>
+                </div>
+                <div class="success-message" id="successMessageFood"></div>
+                <div class="error-message" id="errorMessageFood"></div>
+                <button class="reset-btn" id="resetBtnFood">Upload Another Set</button>
+            </div>
+
+            <!-- Tab 3: Who's Absent Report -->
+            <div id="absence-tab" class="tab-content">
+                <div class="upload-area" id="uploadAreaAbsence">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Click to upload or drag & drop</div>
+                    <div class="upload-hint">Timesheet Excel file (.xlsx, .xls)</div>
+                    <input type="file" id="fileInputAbsence" accept=".xlsx,.xls">
+                </div>
+                <div class="file-name" id="fileNameAbsence"></div>
+                <div class="month-input">
+                    <label for="monthYearAbsence">Select Month & Year:</label>
+                    <input type="month" id="monthYearAbsence" required>
+                </div>
+                <div class="employee-selection" id="employeeSelectionAbsence" style="display: none;">
+                    <label>Select employees with Saturday + Friday off:</label>
+                    <input type="text" class="search-box" id="searchBox2" placeholder="🔍 Search employees...">
+                    <div id="employeeCheckboxesAbsence" class="employee-checkboxes"></div>
+                    <div class="no-results" id="noResults2">No employees found</div>
+                </div>
+                <div class="selected-employees-badge" id="selectedBadge2">
+                    ✓ Selected Sat+Fri Employees: <span class="count" id="selectedCount2">0</span>
+                    <ul class="selected-employees-list" id="selectedList2"></ul>
+                </div>
+                <button class="generate-btn" id="generateAbsenceBtn">Generate Absence Report</button>
+                <div class="progress-container" id="progressContainerAbsence">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFillAbsence">0%</div></div>
+                    <div class="status-message" id="statusMessageAbsence">Processing...</div>
+                </div>
+                <div class="success-message" id="successMessageAbsence"></div>
+                <div class="error-message" id="errorMessageAbsence"></div>
+                <button class="reset-btn" id="resetBtnAbsence">Upload Another File</button>
+            </div>
+
+            <!-- Tab 4: Data Validation -->
+            <div id="validation-tab" class="tab-content">
+                <div class="upload-area" id="uploadAreaValidation">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Click to upload or drag & drop</div>
+                    <div class="upload-hint">Timesheet Excel file (.xlsx, .xls)</div>
+                    <input type="file" id="fileInputValidation" accept=".xlsx,.xls">
+                </div>
+                <div class="file-name" id="fileNameValidation"></div>
+                <div class="month-input">
+                    <label for="monthYearValidation">Select Month & Year:</label>
+                    <input type="month" id="monthYearValidation" required>
+                </div>
+                <button class="generate-btn" id="generateValidationBtn" style="display: none;">Validate Data & Generate Report</button>
+                <div class="progress-container" id="progressContainerValidation">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFillValidation">0%</div></div>
+                    <div class="status-message" id="statusMessageValidation">Processing...</div>
+                </div>
+                <div class="success-message" id="successMessageValidation"></div>
+                <div class="error-message" id="errorMessageValidation"></div>
+                <button class="reset-btn" id="resetBtnValidation">Upload Another File</button>
+            </div>
+
+            <!-- Tab 5: Project Summary -->
+            <div id="project-summary-tab" class="tab-content">
+                <div class="info-box">
+                    <strong>📈 Project Summary Report</strong>
+                    This report shows what percentage of each employee's working time was allocated to each project.
+                    The Excel file will contain 3 sheets:
+                    <ul style="margin-top: 8px; margin-left: 20px;">
+                        <li><strong>Highlighted:</strong> Total ≠ 100% shown in red</li>
+                        <li><strong>With Unassigned:</strong> Missing days shown as "Unassigned"</li>
+                        <li><strong>Raw:</strong> Plain data without formatting</li>
+                    </ul>
+                </div>
+                <div class="upload-area" id="uploadAreaProjectSummary">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Click to upload or drag & drop</div>
+                    <div class="upload-hint">Timesheet Excel file (.xlsx, .xls)</div>
+                    <input type="file" id="fileInputProjectSummary" accept=".xlsx,.xls">
+                </div>
+                <div class="file-name" id="fileNameProjectSummary"></div>
+                <div class="month-input">
+                    <label for="monthYearProjectSummary">Select Month & Year:</label>
+                    <input type="month" id="monthYearProjectSummary" required>
+                </div>
+                <button class="generate-btn" id="generateProjectSummaryBtn" style="display: none;">Generate Project Summary Report</button>
+                <div class="progress-container" id="progressContainerProjectSummary">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFillProjectSummary">0%</div></div>
+                    <div class="status-message" id="statusMessageProjectSummary">Processing...</div>
+                </div>
+                <div class="success-message" id="successMessageProjectSummary"></div>
+                <div class="error-message" id="errorMessageProjectSummary"></div>
+                <button class="reset-btn" id="resetBtnProjectSummary">Upload Another File</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(tc => tc.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+            });
+        });
+
+        // Set default months
+        const now = new Date();
+        const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        document.getElementById('monthYear').value = defaultMonth;
+        document.getElementById('monthYearFood').value = defaultMonth;
+        document.getElementById('monthYearAbsence').value = defaultMonth;
+        document.getElementById('monthYearValidation').value = defaultMonth;
+        document.getElementById('monthYearProjectSummary').value = defaultMonth;
+        document.getElementById('monthYearAll').value = defaultMonth;
+
+        // Search functionality
+        function setupSearch(searchBoxId, checkboxesContainerId, noResultsId) {
+            const searchBox = document.getElementById(searchBoxId);
+            const checkboxesContainer = document.getElementById(checkboxesContainerId);
+            const noResults = document.getElementById(noResultsId);
+            searchBox.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                const checkboxes = checkboxesContainer.querySelectorAll('.employee-checkbox');
+                let visibleCount = 0;
+                checkboxes.forEach(checkbox => {
+                    const label = checkbox.querySelector('label');
+                    const text = label.textContent.toLowerCase();
+                    if (text.includes(searchTerm)) { checkbox.classList.remove('hidden'); visibleCount++; }
+                    else { checkbox.classList.add('hidden'); }
+                });
+                noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+            });
+        }
+
+        function displayEmployeeCheckboxes(containerId, names, badgeCountId, badgeId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            names.forEach((name, index) => {
+                const div = document.createElement('div');
+                div.className = 'employee-checkbox';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `${containerId}_emp_${index}`;
+                checkbox.value = name;
+                const label = document.createElement('label');
+                label.htmlFor = `${containerId}_emp_${index}`;
+                label.textContent = name;
+                checkbox.addEventListener('change', () => updateSelectedCount(badgeCountId, badgeId, containerId));
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+
+        function updateSelectedCount(countId, badgeId, checkboxesId) {
+            const checkboxes = document.querySelectorAll(`#${checkboxesId} input[type="checkbox"]:checked`);
+            const count = checkboxes.length;
+            document.getElementById(countId).textContent = count;
+            const badge = document.getElementById(badgeId);
+            const listId = countId.replace('Count', 'List');
+            const list = document.getElementById(listId);
+            if (count > 0) {
+                badge.style.display = 'block';
+                const names = [];
+                checkboxes.forEach(cb => names.push(cb.value));
+                list.innerHTML = names.map(name => `<li>${name}</li>`).join('');
+            } else { badge.style.display = 'none'; list.innerHTML = ''; }
+        }
+
+        // ===========================================
+        // TAB 0: ALL IN ONE
+        // ===========================================
+        const allTimesheetBtn = document.getElementById('allTimesheetBtn');
+        const allTimesheetInput = document.getElementById('allTimesheetInput');
+        const allProjectPoliciesBtn = document.getElementById('allProjectPoliciesBtn');
+        const allProjectPoliciesInput = document.getElementById('allProjectPoliciesInput');
+        const allEmployeePoliciesBtn = document.getElementById('allEmployeePoliciesBtn');
+        const allEmployeePoliciesInput = document.getElementById('allEmployeePoliciesInput');
+        const generateAllBtn = document.getElementById('generateAllBtn');
+        const monthYearAll = document.getElementById('monthYearAll');
+        const progressContainerAll = document.getElementById('progressContainerAll');
+        const progressFillAll = document.getElementById('progressFillAll');
+        const statusMessageAll = document.getElementById('statusMessageAll');
+        const successMessageAll = document.getElementById('successMessageAll');
+        const errorMessageAll = document.getElementById('errorMessageAll');
+        const resetBtnAll = document.getElementById('resetBtnAll');
+
+        let allTimesheetFile = null, allProjectPoliciesFile = null, allEmployeePoliciesFile = null;
+        let allEmployeeNames = [];
+
+        allTimesheetBtn.addEventListener('click', () => allTimesheetInput.click());
+        allProjectPoliciesBtn.addEventListener('click', () => allProjectPoliciesInput.click());
+        allEmployeePoliciesBtn.addEventListener('click', () => allEmployeePoliciesInput.click());
+
+        allTimesheetInput.addEventListener('change', async (e) => {
+            if (e.target.files[0]) {
+                allTimesheetFile = e.target.files[0];
+                allTimesheetBtn.textContent = `✓ ${allTimesheetFile.name}`;
+                allTimesheetBtn.classList.add('has-file');
+                checkAllFilesAndLoadEmployees();
+            }
+        });
+
+        allProjectPoliciesInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                allProjectPoliciesFile = e.target.files[0];
+                allProjectPoliciesBtn.textContent = `✓ ${allProjectPoliciesFile.name}`;
+                allProjectPoliciesBtn.classList.add('has-file');
+                checkAllFilesReady();
+            }
+        });
+
+        allEmployeePoliciesInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                allEmployeePoliciesFile = e.target.files[0];
+                allEmployeePoliciesBtn.textContent = `✓ ${allEmployeePoliciesFile.name}`;
+                allEmployeePoliciesBtn.classList.add('has-file');
+                checkAllFilesReady();
+            }
+        });
+
+        async function checkAllFilesAndLoadEmployees() {
+            if (allTimesheetFile) {
+                const formData = new FormData();
+                formData.append('excel', allTimesheetFile);
+                formData.append('month', monthYearAll.value.split('-')[1]);
+                formData.append('year', monthYearAll.value.split('-')[0]);
+                try {
+                    const response = await fetch('/get-employees', { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (data.employees && data.employees.length > 0) {
+                        allEmployeeNames = data.employees;
+                        displayEmployeeCheckboxes('employeeCheckboxesAll', allEmployeeNames, 'selectedCountAll', 'selectedBadgeAll');
+                        document.getElementById('employeeSelectionAll').style.display = 'block';
+                        setupSearch('searchBoxAll', 'employeeCheckboxesAll', 'noResultsAll');
+                    }
+                } catch (error) { console.error('Error:', error); }
+            }
+            checkAllFilesReady();
+        }
+
+        function checkAllFilesReady() {
+            if (allTimesheetFile && allProjectPoliciesFile && allEmployeePoliciesFile) {
+                generateAllBtn.style.display = 'block';
+            }
+        }
+
+        generateAllBtn.addEventListener('click', async () => {
+            if (!allTimesheetFile || !allProjectPoliciesFile || !allEmployeePoliciesFile) {
+                alert('Please select all three files'); return;
+            }
+            if (!monthYearAll.value) { alert('Please select a month and year'); return; }
+
+            const selectedEmployees = [];
+            document.querySelectorAll('#employeeCheckboxesAll input[type="checkbox"]:checked').forEach(cb => selectedEmployees.push(cb.value));
+
+            const [year, month] = monthYearAll.value.split('-');
+            const formData = new FormData();
+            formData.append('timesheetExcel', allTimesheetFile);
+            formData.append('projectPoliciesExcel', allProjectPoliciesFile);
+            formData.append('employeePoliciesExcel', allEmployeePoliciesFile);
+            formData.append('month', month);
+            formData.append('year', year);
+            formData.append('satFriEmployees', JSON.stringify(selectedEmployees));
+
+            generateAllBtn.disabled = true;
+            progressContainerAll.style.display = 'block';
+            successMessageAll.style.display = 'none';
+            errorMessageAll.style.display = 'none';
+
+            try {
+                const response = await fetch('/generate-all', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let downloadFileName = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) {
+                                errorMessageAll.textContent = `❌ Error: ${data.error}`;
+                                errorMessageAll.style.display = 'block';
+                                progressContainerAll.style.display = 'none';
+                                generateAllBtn.disabled = false;
+                                resetBtnAll.style.display = 'block';
+                                return;
+                            }
+                            if (data.progress !== undefined) {
+                                progressFillAll.style.width = `${data.progress}%`;
+                                progressFillAll.textContent = `${data.progress}%`;
+                                statusMessageAll.textContent = data.status;
+                            }
+                            if (data.complete) {
+                                downloadFileName = data.fileName;
+                                successMessageAll.innerHTML = `
+                                    🎉 <strong>All Reports Generated Successfully!</strong><br><br>
+                                    <strong>Included in ZIP:</strong><br>
+                                    • 📋 Absence Report<br>
+                                    • 🔍 Data Validation Report<br>
+                                    • 📈 Project Summary Report<br>
+                                    • 🍽️ Food Allowance Report<br>
+                                    • 📊 ${data.employeeCount} Timesheet PDFs<br><br>
+                                    <a href="/download-food-allowance?fileName=${encodeURIComponent(downloadFileName)}" class="download-link">📥 Download All Reports (ZIP)</a>
+                                `;
+                                successMessageAll.style.display = 'block';
+                                progressContainerAll.style.display = 'none';
+                                resetBtnAll.style.display = 'block';
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                errorMessageAll.textContent = `❌ Error: ${error.message}`;
+                errorMessageAll.style.display = 'block';
+                progressContainerAll.style.display = 'none';
+                generateAllBtn.disabled = false;
+                resetBtnAll.style.display = 'block';
+            }
+        });
+
+        resetBtnAll.addEventListener('click', () => {
+            allTimesheetFile = null; allProjectPoliciesFile = null; allEmployeePoliciesFile = null;
+            allEmployeeNames = [];
+            allTimesheetInput.value = ''; allProjectPoliciesInput.value = ''; allEmployeePoliciesInput.value = '';
+            allTimesheetBtn.textContent = 'Choose file...'; allProjectPoliciesBtn.textContent = 'Choose file...'; allEmployeePoliciesBtn.textContent = 'Choose file...';
+            allTimesheetBtn.classList.remove('has-file'); allProjectPoliciesBtn.classList.remove('has-file'); allEmployeePoliciesBtn.classList.remove('has-file');
+            document.getElementById('employeeSelectionAll').style.display = 'none';
+            document.getElementById('selectedBadgeAll').style.display = 'none';
+            generateAllBtn.style.display = 'none';
+            progressContainerAll.style.display = 'none';
+            successMessageAll.style.display = 'none';
+            errorMessageAll.style.display = 'none';
+            resetBtnAll.style.display = 'none';
+            progressFillAll.style.width = '0%';
+            progressFillAll.textContent = '0%';
+            generateAllBtn.disabled = false;
+            document.getElementById('searchBoxAll').value = '';
+        });
+
+        // ===========================================
+        // TAB 1: TIMESHEET PDFs
+        // ===========================================
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const generateBtn = document.getElementById('generateBtn');
+        const monthYear = document.getElementById('monthYear');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const statusMessage = document.getElementById('statusMessage');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const resetBtn = document.getElementById('resetBtn');
+        let selectedFile = null, employeeNames = [];
+
+        uploadArea.addEventListener('click', (e) => { if (e.target !== fileInput) fileInput.click(); });
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#667eea'; uploadArea.style.background = '#f8f9ff'; });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = '#d0d0d0'; uploadArea.style.background = '#fafafa'; });
+        uploadArea.addEventListener('drop', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#d0d0d0'; uploadArea.style.background = '#fafafa'; if (e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]); });
+        fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleFileSelect(e.target.files[0]); });
+
+        function handleFileSelect(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) { alert('Please select a valid Excel file'); return; }
+            selectedFile = file;
+            fileName.textContent = `📄 ${file.name}`;
+            fileName.style.display = 'block';
+            successMessage.style.display = 'none';
+            errorMessage.style.display = 'none';
+            resetBtn.style.display = 'none';
+            loadEmployeeNames();
+        }
+
+        async function loadEmployeeNames() {
+            const formData = new FormData();
+            formData.append('excel', selectedFile);
+            formData.append('month', monthYear.value.split('-')[1]);
+            formData.append('year', monthYear.value.split('-')[0]);
+            try {
+                const response = await fetch('/get-employees', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.employees && data.employees.length > 0) {
+                    employeeNames = data.employees;
+                    displayEmployeeCheckboxes('employeeCheckboxes', employeeNames, 'selectedCount1', 'selectedBadge1');
+                    document.getElementById('employeeSelection').style.display = 'block';
+                    setupSearch('searchBox1', 'employeeCheckboxes', 'noResults1');
+                    generateBtn.style.display = 'block';
+                } else { alert('No employees found in the selected month/year'); }
+            } catch (error) { console.error('Error:', error); alert('Error loading employee names.'); }
+        }
+
+        generateBtn.addEventListener('click', async () => {
+            if (!selectedFile) { alert('Please select a file first'); return; }
+            if (!monthYear.value) { alert('Please select a month and year'); return; }
+            const selectedEmployees = [];
+            document.querySelectorAll('#employeeCheckboxes input[type="checkbox"]:checked').forEach(cb => selectedEmployees.push(cb.value));
+            const [year, month] = monthYear.value.split('-');
+            const formData = new FormData();
+            formData.append('excel', selectedFile);
+            formData.append('month', month);
+            formData.append('year', year);
+            formData.append('satFriEmployees', JSON.stringify(selectedEmployees));
+            generateBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            successMessage.style.display = 'none';
+            errorMessage.style.display = 'none';
+            try {
+                const response = await fetch('/generate', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) { errorMessage.textContent = `❌ Error: ${data.error}`; errorMessage.style.display = 'block'; progressContainer.style.display = 'none'; generateBtn.disabled = false; resetBtn.style.display = 'block'; return; }
+                            if (data.progress !== undefined) { progressFill.style.width = `${data.progress}%`; progressFill.textContent = `${data.progress}%`; statusMessage.textContent = data.status; }
+                            if (data.complete) { successMessage.innerHTML = `✅ Successfully generated ${data.count} timesheet PDFs!<br><a href="/download" class="download-link">📥 Download All (ZIP)</a>`; successMessage.style.display = 'block'; progressContainer.style.display = 'none'; resetBtn.style.display = 'block'; }
+                        }
+                    }
+                }
+            } catch (error) { errorMessage.textContent = `❌ Error: ${error.message}`; errorMessage.style.display = 'block'; progressContainer.style.display = 'none'; generateBtn.disabled = false; resetBtn.style.display = 'block'; }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            selectedFile = null; employeeNames = []; fileInput.value = ''; fileName.style.display = 'none'; generateBtn.style.display = 'none';
+            document.getElementById('employeeSelection').style.display = 'none'; document.getElementById('selectedBadge1').style.display = 'none';
+            progressContainer.style.display = 'none'; successMessage.style.display = 'none'; errorMessage.style.display = 'none'; resetBtn.style.display = 'none';
+            progressFill.style.width = '0%'; progressFill.textContent = '0%'; generateBtn.disabled = false; document.getElementById('searchBox1').value = '';
+        });
+
+        // ===========================================
+        // TAB 2: FOOD ALLOWANCE
+        // ===========================================
+        const timesheetBtn = document.getElementById('timesheetBtn');
+        const timesheetInput = document.getElementById('timesheetInput');
+        const projectPoliciesBtn = document.getElementById('projectPoliciesBtn');
+        const projectPoliciesInput = document.getElementById('projectPoliciesInput');
+        const employeePoliciesBtn = document.getElementById('employeePoliciesBtn');
+        const employeePoliciesInput = document.getElementById('employeePoliciesInput');
+        const generateFoodBtn = document.getElementById('generateFoodBtn');
+        const progressContainerFood = document.getElementById('progressContainerFood');
+        const progressFillFood = document.getElementById('progressFillFood');
+        const statusMessageFood = document.getElementById('statusMessageFood');
+        const successMessageFood = document.getElementById('successMessageFood');
+        const errorMessageFood = document.getElementById('errorMessageFood');
+        const resetBtnFood = document.getElementById('resetBtnFood');
+        let timesheetFile = null, projectPoliciesFile = null, employeePoliciesFile = null;
+
+        timesheetBtn.addEventListener('click', () => timesheetInput.click());
+        projectPoliciesBtn.addEventListener('click', () => projectPoliciesInput.click());
+        employeePoliciesBtn.addEventListener('click', () => employeePoliciesInput.click());
+        timesheetInput.addEventListener('change', (e) => { if (e.target.files[0]) { timesheetFile = e.target.files[0]; timesheetBtn.textContent = `✓ ${timesheetFile.name}`; timesheetBtn.classList.add('has-file'); } });
+        projectPoliciesInput.addEventListener('change', (e) => { if (e.target.files[0]) { projectPoliciesFile = e.target.files[0]; projectPoliciesBtn.textContent = `✓ ${projectPoliciesFile.name}`; projectPoliciesBtn.classList.add('has-file'); } });
+        employeePoliciesInput.addEventListener('change', (e) => { if (e.target.files[0]) { employeePoliciesFile = e.target.files[0]; employeePoliciesBtn.textContent = `✓ ${employeePoliciesFile.name}`; employeePoliciesBtn.classList.add('has-file'); } });
+
+        generateFoodBtn.addEventListener('click', async () => {
+            if (!timesheetFile || !projectPoliciesFile || !employeePoliciesFile) { alert('Please select all three files'); return; }
+            const monthYearFood = document.getElementById('monthYearFood');
+            if (!monthYearFood.value) { alert('Please select a month and year'); return; }
+            const [year, month] = monthYearFood.value.split('-');
+            const formData = new FormData();
+            formData.append('timesheetExcel', timesheetFile);
+            formData.append('projectPoliciesExcel', projectPoliciesFile);
+            formData.append('employeePoliciesExcel', employeePoliciesFile);
+            formData.append('month', month);
+            formData.append('year', year);
+            generateFoodBtn.disabled = true;
+            progressContainerFood.style.display = 'block';
+            successMessageFood.style.display = 'none';
+            errorMessageFood.style.display = 'none';
+            try {
+                const response = await fetch('/generate-food-allowance', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let downloadFileName = '';
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) { errorMessageFood.textContent = `❌ Error: ${data.error}`; errorMessageFood.style.display = 'block'; progressContainerFood.style.display = 'none'; generateFoodBtn.disabled = false; resetBtnFood.style.display = 'block'; return; }
+                            if (data.progress !== undefined) { progressFillFood.style.width = `${data.progress}%`; progressFillFood.textContent = `${data.progress}%`; statusMessageFood.textContent = data.status; }
+                            if (data.complete) { downloadFileName = data.fileName; successMessageFood.innerHTML = `✅ Successfully generated Food Allowance Report!<br><a href="/download-food-allowance?fileName=${encodeURIComponent(downloadFileName)}" class="download-link">📥 Download Excel Report</a>`; successMessageFood.style.display = 'block'; progressContainerFood.style.display = 'none'; resetBtnFood.style.display = 'block'; }
+                        }
+                    }
+                }
+            } catch (error) { errorMessageFood.textContent = `❌ Error: ${error.message}`; errorMessageFood.style.display = 'block'; progressContainerFood.style.display = 'none'; generateFoodBtn.disabled = false; resetBtnFood.style.display = 'block'; }
+        });
+
+        resetBtnFood.addEventListener('click', () => {
+            timesheetFile = null; projectPoliciesFile = null; employeePoliciesFile = null;
+            timesheetInput.value = ''; projectPoliciesInput.value = ''; employeePoliciesInput.value = '';
+            timesheetBtn.textContent = 'Choose file...'; projectPoliciesBtn.textContent = 'Choose file...'; employeePoliciesBtn.textContent = 'Choose file...';
+            timesheetBtn.classList.remove('has-file'); projectPoliciesBtn.classList.remove('has-file'); employeePoliciesBtn.classList.remove('has-file');
+            progressContainerFood.style.display = 'none'; successMessageFood.style.display = 'none'; errorMessageFood.style.display = 'none'; resetBtnFood.style.display = 'none';
+            progressFillFood.style.width = '0%'; progressFillFood.textContent = '0%'; generateFoodBtn.disabled = false;
+        });
+
+        // ===========================================
+        // TAB 3: WHO'S ABSENT
+        // ===========================================
+        const uploadAreaAbsence = document.getElementById('uploadAreaAbsence');
+        const fileInputAbsence = document.getElementById('fileInputAbsence');
+        const fileNameAbsence = document.getElementById('fileNameAbsence');
+        const generateAbsenceBtn = document.getElementById('generateAbsenceBtn');
+        const monthYearAbsence = document.getElementById('monthYearAbsence');
+        const progressContainerAbsence = document.getElementById('progressContainerAbsence');
+        const progressFillAbsence = document.getElementById('progressFillAbsence');
+        const statusMessageAbsence = document.getElementById('statusMessageAbsence');
+        const successMessageAbsence = document.getElementById('successMessageAbsence');
+        const errorMessageAbsence = document.getElementById('errorMessageAbsence');
+        const resetBtnAbsence = document.getElementById('resetBtnAbsence');
+        let selectedFileAbsence = null, employeeNamesAbsence = [];
+
+        uploadAreaAbsence.addEventListener('click', (e) => { if (e.target !== fileInputAbsence) fileInputAbsence.click(); });
+        uploadAreaAbsence.addEventListener('dragover', (e) => { e.preventDefault(); uploadAreaAbsence.style.borderColor = '#667eea'; uploadAreaAbsence.style.background = '#f8f9ff'; });
+        uploadAreaAbsence.addEventListener('dragleave', () => { uploadAreaAbsence.style.borderColor = '#d0d0d0'; uploadAreaAbsence.style.background = '#fafafa'; });
+        uploadAreaAbsence.addEventListener('drop', (e) => { e.preventDefault(); uploadAreaAbsence.style.borderColor = '#d0d0d0'; uploadAreaAbsence.style.background = '#fafafa'; if (e.dataTransfer.files[0]) handleFileSelectAbsence(e.dataTransfer.files[0]); });
+        fileInputAbsence.addEventListener('change', (e) => { if (e.target.files[0]) handleFileSelectAbsence(e.target.files[0]); });
+
+        function handleFileSelectAbsence(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) { alert('Please select a valid Excel file'); return; }
+            selectedFileAbsence = file;
+            fileNameAbsence.textContent = `📄 ${file.name}`;
+            fileNameAbsence.style.display = 'block';
+            successMessageAbsence.style.display = 'none';
+            errorMessageAbsence.style.display = 'none';
+            resetBtnAbsence.style.display = 'none';
+            loadEmployeeNamesAbsence();
+        }
+
+        async function loadEmployeeNamesAbsence() {
+            const formData = new FormData();
+            formData.append('excel', selectedFileAbsence);
+            formData.append('month', monthYearAbsence.value.split('-')[1]);
+            formData.append('year', monthYearAbsence.value.split('-')[0]);
+            try {
+                const response = await fetch('/get-employees', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.employees && data.employees.length > 0) {
+                    employeeNamesAbsence = data.employees;
+                    displayEmployeeCheckboxes('employeeCheckboxesAbsence', employeeNamesAbsence, 'selectedCount2', 'selectedBadge2');
+                    document.getElementById('employeeSelectionAbsence').style.display = 'block';
+                    setupSearch('searchBox2', 'employeeCheckboxesAbsence', 'noResults2');
+                    generateAbsenceBtn.style.display = 'block';
+                } else { alert('No employees found in the selected month/year'); }
+            } catch (error) { console.error('Error:', error); alert('Error loading employee names.'); }
+        }
+
+        generateAbsenceBtn.addEventListener('click', async () => {
+            if (!selectedFileAbsence) { alert('Please select a file first'); return; }
+            if (!monthYearAbsence.value) { alert('Please select a month and year'); return; }
+            const selectedEmployees = [];
+            document.querySelectorAll('#employeeCheckboxesAbsence input[type="checkbox"]:checked').forEach(cb => selectedEmployees.push(cb.value));
+            const [year, month] = monthYearAbsence.value.split('-');
+            const formData = new FormData();
+            formData.append('timesheetExcel', selectedFileAbsence);
+            formData.append('month', month);
+            formData.append('year', year);
+            formData.append('satFriEmployees', JSON.stringify(selectedEmployees));
+            generateAbsenceBtn.disabled = true;
+            progressContainerAbsence.style.display = 'block';
+            successMessageAbsence.style.display = 'none';
+            errorMessageAbsence.style.display = 'none';
+            try {
+                const response = await fetch('/generate-absence-report', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let downloadFileName = '';
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) { errorMessageAbsence.textContent = `❌ Error: ${data.error}`; errorMessageAbsence.style.display = 'block'; progressContainerAbsence.style.display = 'none'; generateAbsenceBtn.disabled = false; resetBtnAbsence.style.display = 'block'; return; }
+                            if (data.progress !== undefined) { progressFillAbsence.style.width = `${data.progress}%`; progressFillAbsence.textContent = `${data.progress}%`; statusMessageAbsence.textContent = data.status; }
+                            if (data.complete) { downloadFileName = data.fileName; successMessageAbsence.innerHTML = `✅ Successfully generated Absence Report!<br><a href="/download-food-allowance?fileName=${encodeURIComponent(downloadFileName)}" class="download-link">📥 Download Excel Report</a>`; successMessageAbsence.style.display = 'block'; progressContainerAbsence.style.display = 'none'; resetBtnAbsence.style.display = 'block'; }
+                        }
+                    }
+                }
+            } catch (error) { errorMessageAbsence.textContent = `❌ Error: ${error.message}`; errorMessageAbsence.style.display = 'block'; progressContainerAbsence.style.display = 'none'; generateAbsenceBtn.disabled = false; resetBtnAbsence.style.display = 'block'; }
+        });
+
+        resetBtnAbsence.addEventListener('click', () => {
+            selectedFileAbsence = null; employeeNamesAbsence = []; fileInputAbsence.value = ''; fileNameAbsence.style.display = 'none'; generateAbsenceBtn.style.display = 'none';
+            document.getElementById('employeeSelectionAbsence').style.display = 'none'; document.getElementById('selectedBadge2').style.display = 'none';
+            progressContainerAbsence.style.display = 'none'; successMessageAbsence.style.display = 'none'; errorMessageAbsence.style.display = 'none'; resetBtnAbsence.style.display = 'none';
+            progressFillAbsence.style.width = '0%'; progressFillAbsence.textContent = '0%'; generateAbsenceBtn.disabled = false; document.getElementById('searchBox2').value = '';
+        });
+
+        // ===========================================
+        // TAB 4: DATA VALIDATION
+        // ===========================================
+        const uploadAreaValidation = document.getElementById('uploadAreaValidation');
+        const fileInputValidation = document.getElementById('fileInputValidation');
+        const fileNameValidation = document.getElementById('fileNameValidation');
+        const generateValidationBtn = document.getElementById('generateValidationBtn');
+        const monthYearValidation = document.getElementById('monthYearValidation');
+        const progressContainerValidation = document.getElementById('progressContainerValidation');
+        const progressFillValidation = document.getElementById('progressFillValidation');
+        const statusMessageValidation = document.getElementById('statusMessageValidation');
+        const successMessageValidation = document.getElementById('successMessageValidation');
+        const errorMessageValidation = document.getElementById('errorMessageValidation');
+        const resetBtnValidation = document.getElementById('resetBtnValidation');
+        let selectedFileValidation = null;
+
+        uploadAreaValidation.addEventListener('click', (e) => { if (e.target !== fileInputValidation) fileInputValidation.click(); });
+        uploadAreaValidation.addEventListener('dragover', (e) => { e.preventDefault(); uploadAreaValidation.style.borderColor = '#667eea'; uploadAreaValidation.style.background = '#f8f9ff'; });
+        uploadAreaValidation.addEventListener('dragleave', () => { uploadAreaValidation.style.borderColor = '#d0d0d0'; uploadAreaValidation.style.background = '#fafafa'; });
+        uploadAreaValidation.addEventListener('drop', (e) => { e.preventDefault(); uploadAreaValidation.style.borderColor = '#d0d0d0'; uploadAreaValidation.style.background = '#fafafa'; if (e.dataTransfer.files[0]) handleFileSelectValidation(e.dataTransfer.files[0]); });
+        fileInputValidation.addEventListener('change', (e) => { if (e.target.files[0]) handleFileSelectValidation(e.target.files[0]); });
+
+        function handleFileSelectValidation(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) { alert('Please select a valid Excel file'); return; }
+            selectedFileValidation = file;
+            fileNameValidation.textContent = `📄 ${file.name}`;
+            fileNameValidation.style.display = 'block';
+            generateValidationBtn.style.display = 'block';
+            successMessageValidation.style.display = 'none';
+            errorMessageValidation.style.display = 'none';
+            resetBtnValidation.style.display = 'none';
+        }
+
+        generateValidationBtn.addEventListener('click', async () => {
+            if (!selectedFileValidation) { alert('Please select a file first'); return; }
+            if (!monthYearValidation.value) { alert('Please select a month and year'); return; }
+            const [year, month] = monthYearValidation.value.split('-');
+            const formData = new FormData();
+            formData.append('timesheetExcel', selectedFileValidation);
+            formData.append('month', month);
+            formData.append('year', year);
+            generateValidationBtn.disabled = true;
+            progressContainerValidation.style.display = 'block';
+            successMessageValidation.style.display = 'none';
+            errorMessageValidation.style.display = 'none';
+            try {
+                const response = await fetch('/validate-data', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let downloadFileName = '', stats = null;
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) { errorMessageValidation.textContent = `❌ Error: ${data.error}`; errorMessageValidation.style.display = 'block'; progressContainerValidation.style.display = 'none'; generateValidationBtn.disabled = false; resetBtnValidation.style.display = 'block'; return; }
+                            if (data.progress !== undefined) { progressFillValidation.style.width = `${data.progress}%`; progressFillValidation.textContent = `${data.progress}%`; statusMessageValidation.textContent = data.status; }
+                            if (data.complete) {
+                                downloadFileName = data.fileName; stats = data.statistics;
+                                successMessageValidation.innerHTML = `✅ Validation Complete!<br><br><strong>Summary:</strong><br>• Total Records: ${stats.totalRecords}<br>• Clean Records: ${stats.cleanRecords} (${stats.validationRate}%)<br>• Duplicates Removed: ${stats.duplicatesFound} (${stats.duplicateRate}%)<br>• Inconsistencies Found: ${stats.inconsistenciesFound}<br><br><a href="/download-food-allowance?fileName=${encodeURIComponent(downloadFileName)}" class="download-link">📥 Download Validation Report</a>`;
+                                successMessageValidation.style.display = 'block'; progressContainerValidation.style.display = 'none'; resetBtnValidation.style.display = 'block';
+                            }
+                        }
+                    }
+                }
+            } catch (error) { errorMessageValidation.textContent = `❌ Error: ${error.message}`; errorMessageValidation.style.display = 'block'; progressContainerValidation.style.display = 'none'; generateValidationBtn.disabled = false; resetBtnValidation.style.display = 'block'; }
+        });
+
+        resetBtnValidation.addEventListener('click', () => {
+            selectedFileValidation = null; fileInputValidation.value = ''; fileNameValidation.style.display = 'none'; generateValidationBtn.style.display = 'none';
+            progressContainerValidation.style.display = 'none'; successMessageValidation.style.display = 'none'; errorMessageValidation.style.display = 'none'; resetBtnValidation.style.display = 'none';
+            progressFillValidation.style.width = '0%'; progressFillValidation.textContent = '0%'; generateValidationBtn.disabled = false;
+        });
+
+        // ===========================================
+        // TAB 5: PROJECT SUMMARY
+        // ===========================================
+        const uploadAreaProjectSummary = document.getElementById('uploadAreaProjectSummary');
+        const fileInputProjectSummary = document.getElementById('fileInputProjectSummary');
+        const fileNameProjectSummary = document.getElementById('fileNameProjectSummary');
+        const generateProjectSummaryBtn = document.getElementById('generateProjectSummaryBtn');
+        const monthYearProjectSummary = document.getElementById('monthYearProjectSummary');
+        const progressContainerProjectSummary = document.getElementById('progressContainerProjectSummary');
+        const progressFillProjectSummary = document.getElementById('progressFillProjectSummary');
+        const statusMessageProjectSummary = document.getElementById('statusMessageProjectSummary');
+        const successMessageProjectSummary = document.getElementById('successMessageProjectSummary');
+        const errorMessageProjectSummary = document.getElementById('errorMessageProjectSummary');
+        const resetBtnProjectSummary = document.getElementById('resetBtnProjectSummary');
+        let selectedFileProjectSummary = null;
+
+        uploadAreaProjectSummary.addEventListener('click', (e) => { if (e.target !== fileInputProjectSummary) fileInputProjectSummary.click(); });
+        uploadAreaProjectSummary.addEventListener('dragover', (e) => { e.preventDefault(); uploadAreaProjectSummary.style.borderColor = '#667eea'; uploadAreaProjectSummary.style.background = '#f8f9ff'; });
+        uploadAreaProjectSummary.addEventListener('dragleave', () => { uploadAreaProjectSummary.style.borderColor = '#d0d0d0'; uploadAreaProjectSummary.style.background = '#fafafa'; });
+        uploadAreaProjectSummary.addEventListener('drop', (e) => { e.preventDefault(); uploadAreaProjectSummary.style.borderColor = '#d0d0d0'; uploadAreaProjectSummary.style.background = '#fafafa'; if (e.dataTransfer.files[0]) handleFileSelectProjectSummary(e.dataTransfer.files[0]); });
+        fileInputProjectSummary.addEventListener('change', (e) => { if (e.target.files[0]) handleFileSelectProjectSummary(e.target.files[0]); });
+
+        function handleFileSelectProjectSummary(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) { alert('Please select a valid Excel file'); return; }
+            selectedFileProjectSummary = file;
+            fileNameProjectSummary.textContent = `📄 ${file.name}`;
+            fileNameProjectSummary.style.display = 'block';
+            generateProjectSummaryBtn.style.display = 'block';
+            successMessageProjectSummary.style.display = 'none';
+            errorMessageProjectSummary.style.display = 'none';
+            resetBtnProjectSummary.style.display = 'none';
+        }
+
+        generateProjectSummaryBtn.addEventListener('click', async () => {
+            if (!selectedFileProjectSummary) { alert('Please select a file first'); return; }
+            if (!monthYearProjectSummary.value) { alert('Please select a month and year'); return; }
+            const [year, month] = monthYearProjectSummary.value.split('-');
+            const formData = new FormData();
+            formData.append('timesheetExcel', selectedFileProjectSummary);
+            formData.append('month', month);
+            formData.append('year', year);
+            generateProjectSummaryBtn.disabled = true;
+            progressContainerProjectSummary.style.display = 'block';
+            successMessageProjectSummary.style.display = 'none';
+            errorMessageProjectSummary.style.display = 'none';
+            try {
+                const response = await fetch('/generate-project-summary', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let downloadFileName = '', stats = null;
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) { errorMessageProjectSummary.textContent = `❌ Error: ${data.error}`; errorMessageProjectSummary.style.display = 'block'; progressContainerProjectSummary.style.display = 'none'; generateProjectSummaryBtn.disabled = false; resetBtnProjectSummary.style.display = 'block'; return; }
+                            if (data.progress !== undefined) { progressFillProjectSummary.style.width = `${data.progress}%`; progressFillProjectSummary.textContent = `${data.progress}%`; statusMessageProjectSummary.textContent = data.status; }
+                            if (data.complete) {
+                                downloadFileName = data.fileName; stats = data.statistics;
+                                successMessageProjectSummary.innerHTML = `✅ Project Summary Generated!<br><br><strong>Summary:</strong><br>• Total Employees: ${stats.totalEmployees}<br>• Total Projects: ${stats.totalProjects}<br><br><strong>Excel contains 3 sheets:</strong><br>• Highlighted (red if ≠100%)<br>• With Unassigned<br>• Raw Data<br><br><a href="/download-food-allowance?fileName=${encodeURIComponent(downloadFileName)}" class="download-link">📥 Download Project Summary</a>`;
+                                successMessageProjectSummary.style.display = 'block'; progressContainerProjectSummary.style.display = 'none'; resetBtnProjectSummary.style.display = 'block';
+                            }
+                        }
+                    }
+                }
+            } catch (error) { errorMessageProjectSummary.textContent = `❌ Error: ${error.message}`; errorMessageProjectSummary.style.display = 'block'; progressContainerProjectSummary.style.display = 'none'; generateProjectSummaryBtn.disabled = false; resetBtnProjectSummary.style.display = 'block'; }
+        });
+
+        resetBtnProjectSummary.addEventListener('click', () => {
+            selectedFileProjectSummary = null; fileInputProjectSummary.value = ''; fileNameProjectSummary.style.display = 'none'; generateProjectSummaryBtn.style.display = 'none';
+            progressContainerProjectSummary.style.display = 'none'; successMessageProjectSummary.style.display = 'none'; errorMessageProjectSummary.style.display = 'none'; resetBtnProjectSummary.style.display = 'none';
+            progressFillProjectSummary.style.width = '0%'; progressFillProjectSummary.textContent = '0%'; generateProjectSummaryBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>
