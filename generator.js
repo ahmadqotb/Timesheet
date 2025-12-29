@@ -442,10 +442,10 @@ class TimesheetGenerator {
         }
 
 const browser = await puppeteer.launch({
-            headless: 'new',
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable' || '/usr/bin/chromium-browser',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        });
+    headless: 'new',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+});
 
         const employees = Object.keys(this.employeeData);
         const total = employees.length;
