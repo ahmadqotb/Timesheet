@@ -32,7 +32,7 @@ nixPkgs = [
 ]
 
 [phases.build]
-cmds = ["npm install", "npm run build --if-present"]
+cmds = ["npm install"]
 
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
