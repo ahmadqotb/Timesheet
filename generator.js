@@ -27,7 +27,6 @@ class TimesheetGenerator {
         return null;
     }
 
-    // Format date as YYYY-MM-DD without timezone conversion
     formatDateLocal(date) {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -40,7 +39,6 @@ class TimesheetGenerator {
         await workbook.xlsx.readFile(this.excelPath);
         
         const worksheet = workbook.worksheets[0];
-
         if (!worksheet) {
             throw new Error('No worksheet found in Excel file');
         }
@@ -261,30 +259,14 @@ class TimesheetGenerator {
     }
 
     async generatePDFs(outputDir, progressCallback) {
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
-
-        const possiblePaths = [
-            process.env.PUPPETEER_EXECUTABLE_PATH,
-            '/usr/bin/chromium',
-            '/usr/bin/google-chrome-stable',
-            '/usr/bin/chromium-browser'
-        ];
-
-        const executablePath = possiblePaths.find(path => path && fs.existsSync(path));
-        console.log(`[Puppeteer] Launching from: ${executablePath || 'Internal Cache'}`);
-
         const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: executablePath,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--single-process',
-                '--no-zygote'
+                '--disable-gpu'
             ]
         });
 
@@ -304,12 +286,12 @@ class TimesheetGenerator {
                     });
                 }
 
-                const html = this.generateHTML(employeeName, entries, summary);
                 const page = await browser.newPage();
-                
                 try {
+                    const html = this.generateHTML(employeeName, entries, summary);
                     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
-                    const fileName = `${employeeName}_Timesheet_${String(this.month).padStart(2, '0')}-${this.year}.pdf`;
+                    
+                    const fileName = `${employeeName}_Timesheet.pdf`;
                     const filePath = path.join(outputDir, fileName);
 
                     await page.pdf({
