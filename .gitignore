@@ -6,3 +6,6 @@ output/*
 .env
 *.log
 .DS_Store
+Thumbs.db
+.cache/
+.railway/
