@@ -1,125 +1,97 @@
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
+const ExcelJS = require('exceljs');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
-const archiver = require('archiver');
-const TimesheetGenerator = require('./generator');
-const FoodAllowanceCalculator = require('./foodAllowance');
-const AbsenceReportGenerator = require('./absenceReport');
-const DataValidator = require('./dataValidator');
-const ProjectSummaryGenerator = require('./projectSummary');
+const path = require('path');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-const uploadsDir = path.join(__dirname, 'uploads');
-const outputDir = path.join(__dirname, 'output');
-
-[uploadsDir, outputDir].forEach(dir => {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-
-const upload = multer({ storage });
-
-app.use(express.static(__dirname));
-
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-
-// Helper for Progress Streaming
-const createProgressStream = (res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    return (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-};
-
-// 1. PDF GENERATION
-app.post('/generate', upload.single('excel'), async (req, res) => {
-    let subDir = '';
-    try {
-        const { month, year } = req.body;
-        const satFriEmployees = req.body.satFriEmployees ? JSON.parse(req.body.satFriEmployees) : [];
-        const sendProgress = createProgressStream(res);
-
-        const timestamp = Date.now();
-        subDir = path.join(outputDir, `run-${timestamp}`);
-        fs.mkdirSync(subDir, { recursive: true });
-
-        const generator = new TimesheetGenerator(req.file.path, month, year, satFriEmployees);
-        const count = await generator.processExcel();
-        
-        await generator.generatePDFs(subDir, (p) => sendProgress(p));
-
-        const zipName = `Timesheets_${timestamp}.zip`;
-        const output = fs.createWriteStream(path.join(outputDir, zipName));
-        const archive = archiver('zip');
-        
-        archive.pipe(output);
-        archive.directory(subDir, false);
-        await archive.finalize();
-
-        sendProgress({ progress: 100, status: 'Complete!', complete: true, count, zipFile: zipName });
-        res.end();
-    } catch (error) {
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-        res.end();
-    } finally {
-        if (req.file) fs.unlinkSync(req.file.path);
-        if (subDir) fs.rmSync(subDir, { recursive: true, force: true });
+class TimesheetGenerator {
+    constructor(excelPath, month, year, satFriEmployees = []) {
+        this.excelPath = excelPath;
+        this.month = parseInt(month);
+        this.year = parseInt(year);
+        this.satFriEmployees = satFriEmployees;
+        this.employeeData = {};
+        this.employeeSummaries = {};
+        this.logoBase64 = this.getLogoBase64();
     }
-});
 
-// 2. DATA VALIDATOR
-app.post('/validate-data', upload.single('excel'), async (req, res) => {
-    try {
-        const { month, year } = req.body;
-        const validator = new DataValidator(req.file.path, month, year);
-        await validator.process();
-        const fileName = `Validation_Report_${Date.now()}.xlsx`;
-        await validator.generateReport(path.join(outputDir, fileName));
-        res.json({ success: true, fileName });
-    } catch (error) { res.status(500).json({ error: error.message }); }
-    finally { if (req.file) fs.unlinkSync(req.file.path); }
-});
+    getLogoBase64() {
+        try {
+            const logoPath = path.join(__dirname, 'Logo.png');
+            if (fs.existsSync(logoPath)) {
+                return `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
+            }
+        } catch (e) {}
+        return null;
+    }
 
-// 3. PROJECT SUMMARY
-app.post('/generate-project-summary', upload.single('excel'), async (req, res) => {
-    try {
-        const { month, year } = req.body;
-        const generator = new ProjectSummaryGenerator(req.file.path, month, year);
-        await generator.loadTimesheetData();
-        const fileName = `Project_Summary_${Date.now()}.xlsx`;
-        await generator.generateExcelReport(path.join(outputDir, fileName));
-        res.json({ success: true, fileName });
-    } catch (error) { res.status(500).json({ error: error.message }); }
-    finally { if (req.file) fs.unlinkSync(req.file.path); }
-});
+    formatDateLocal(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
 
-// DOWNLOADS
-app.get('/download-all', (req, res) => {
-    const filePath = path.join(outputDir, req.query.fileName);
-    if (fs.existsSync(filePath)) res.download(filePath);
-    else res.status(404).send('File expired');
-});
+    async processExcel() {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(this.excelPath);
+        const worksheet = workbook.worksheets[0];
+        
+        worksheet.eachRow((row, rowIndex) => {
+            if (rowIndex === 1) return;
+            const projectCode = row.getCell(1).value || '--';
+            const projectName = row.getCell(2).value || '--';
+            const dateValue = row.getCell(3).value;
+            const employeeName = row.getCell(4).value;
 
-app.get('/download-food-allowance', (req, res) => {
-    const filePath = path.join(outputDir, req.query.fileName);
-    if (fs.existsSync(filePath)) res.download(filePath);
-    else res.status(404).send('File expired');
-});
+            if (!employeeName || !dateValue) return;
 
-// CLEANUP (Every 30 mins)
-setInterval(() => {
-    const now = Date.now();
-    fs.readdirSync(outputDir).forEach(f => {
-        const p = path.join(outputDir, f);
-        if (now - fs.statSync(p).mtimeMs > 1800000) fs.rmSync(p, { recursive: true, force: true });
-    });
-}, 600000);
+            let date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+            if (isNaN(date.getTime()) || date.getMonth() + 1 !== this.month || date.getFullYear() !== this.year) return;
 
-app.listen(PORT, () => console.log(`Server on port ${PORT}`));
+            if (!this.employeeData[employeeName]) this.employeeData[employeeName] = [];
+            this.employeeData[employeeName].push({ projectCode, projectName, date, dayOfWeek: date.getDay() });
+        });
+
+        this.calculateSummaries();
+        return Object.keys(this.employeeData).length;
+    }
+
+    // ... [Include your existing calculateSummaries, getTotalFridaysInMonth, and generateHTML methods here] ...
+
+    async generatePDFs(outputDir, progressCallback) {
+        const browser = await puppeteer.launch({
+            headless: 'new',
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+
+        try {
+            const employees = Object.keys(this.employeeData);
+            for (let i = 0; i < employees.length; i++) {
+                const name = employees[i];
+                if (progressCallback) progressCallback({ 
+                    progress: Math.round(((i + 1) / employees.length) * 100), 
+                    status: `Generating: ${name}` 
+                });
+
+                const page = await browser.newPage();
+                try {
+                    const html = this.generateHTML(name, this.employeeData[name], this.employeeSummaries[name]);
+                    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+                    await page.pdf({
+                        path: path.join(outputDir, `${name}_Timesheet.pdf`),
+                        format: 'A4',
+                        printBackground: true,
+                        margin: { top: '8mm', bottom: '8mm' }
+                    });
+                } finally {
+                    await page.close();
+                }
+            }
+        } finally {
+            await browser.close();
+        }
+    }
+}
+
+module.exports = TimesheetGenerator;
