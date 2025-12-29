@@ -4,7 +4,9 @@
   "description": "Generate employee timesheet PDFs and reports from Excel",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'Skipping internal chrome download...'",
+    "postinstall": "PUPPETEER_SKIP_DOWNLOAD=true"
   },
   "engines": {
     "node": ">=18.0.0"
