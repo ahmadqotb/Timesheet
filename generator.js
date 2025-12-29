@@ -441,32 +441,31 @@ class TimesheetGenerator {
             fs.mkdirSync(outputDir, { recursive: true });
         }
 
-// 1. Define possible paths where Railway/Nixpacks installs Chromium
+const fs = require('fs');
+
+        // Check for common Railway/Nixpacks browser locations
         const possiblePaths = [
             process.env.PUPPETEER_EXECUTABLE_PATH,
             '/usr/bin/chromium',
-            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
             '/usr/bin/chromium-browser'
         ];
 
-        // 2. Find the first path that actually exists
-        const fs = require('fs');
         const executablePath = possiblePaths.find(path => path && fs.existsSync(path));
-
-        console.log(`[PDF Generator] Using browser at: ${executablePath || 'NOT FOUND'}`);
+        console.log(`[Puppeteer] Launching from: ${executablePath || 'Internal Cache'}`);
 
         const browser = await puppeteer.launch({
-            headless: 'new',
-            executablePath: executablePath, 
+            headless: 'new', // Use 'new' or true for 2025 stability
+            executablePath: executablePath,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--single-process'
+                '--single-process', // Crucial for low-memory Railway environments
+                '--no-zygote'
             ]
         });
-
         const employees = Object.keys(this.employeeData);
         const total = employees.length;
 
