@@ -1,5 +1,6 @@
 [phases.setup]
 nixPkgs = [
+    "nodejs_18",
     "chromium",
     "libuuid",
     "libxkbcommon",
@@ -30,6 +31,10 @@ nixPkgs = [
     "xorg.libxcb"
 ]
 
+[phases.build]
+cmds = ["npm install", "npm run build --if-present"]
+
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "/nix/var/nix/profiles/default/bin/chromium"
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
+NODE_ENV = "production"
