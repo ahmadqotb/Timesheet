@@ -5,8 +5,9 @@ const fs = require('fs');
 const archiver = require('archiver');
 const TimesheetGenerator = require('./generator');
 const FoodAllowanceCalculator = require('./foodAllowance');
-// const AbsenceReportGenerator = require('./absenceReport'); // Uncomment if files exist
-// const ProjectSummaryGenerator = require('./projectSummary'); // Uncomment if files exist
+// Ensure these files exist or keep them commented out
+// const AbsenceReportGenerator = require('./absenceReport'); 
+// const ProjectSummaryGenerator = require('./projectSummary');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,7 +41,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Endpoint to get employee names
+// Endpoint to get employee names for the checklist
 app.post('/get-employees', upload.single('excel'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -51,7 +52,7 @@ app.post('/get-employees', upload.single('excel'), async (req, res) => {
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         res.json({ employees });
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error fetching employees:', error);
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         res.status(500).json({ error: error.message });
     }
@@ -66,7 +67,7 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
         const { month, year } = req.body;
         const satFriEmployees = req.body.satFriEmployees ? JSON.parse(req.body.satFriEmployees) : [];
 
-        // Create unique subfolder for this specific request to prevent file mixing
+        // Unique folder per request prevents users from overwriting each other's files
         const timestamp = Date.now();
         requestSubDir = path.join(outputDir, `run-${timestamp}`);
         fs.mkdirSync(requestSubDir, { recursive: true });
@@ -89,12 +90,12 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
 
         sendProgress({ progress: 15, status: `Found ${employeeCount} employees. Generating PDFs...` });
 
-        // Generate PDFs into the subfolder
+        // Generate individual PDFs into the sub-directory
         await generator.generatePDFs(requestSubDir, (progress) => {
             sendProgress(progress);
         });
 
-        // Create ZIP of the generated PDFs
+        // Create ZIP file for the "Download All" feature
         const zipFileName = `Timesheets_${String(month).padStart(2, '0')}-${year}_${timestamp}.zip`;
         const zipPath = path.join(outputDir, zipFileName);
         const output = fs.createWriteStream(zipPath);
@@ -108,7 +109,7 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
             archive.finalize();
         });
 
-        // Cleanup the subfolder (keep only the ZIP)
+        // Cleanup: remove the individual PDFs to save disk space, keep only the ZIP
         fs.rmSync(requestSubDir, { recursive: true, force: true });
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
 
@@ -117,53 +118,53 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
             status: 'Complete!',
             complete: true,
             count: employeeCount,
-            zipFile: zipFileName
+            zipFile: zipFileName // index.html uses this to create the download link
         });
 
         res.end();
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Generation Crash:', error);
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
         res.end();
     }
 });
 
-// Download endpoint for the ZIP file
+// Generic download endpoint
 app.get('/download-all', (req, res) => {
     const fileName = req.query.fileName;
     if (!fileName) return res.status(400).send('File name required');
     
     const filePath = path.join(outputDir, fileName);
     if (fs.existsSync(filePath)) {
-        res.download(filePath, (err) => {
-            if (!err) {
-                // Optional: Delete zip after download to save space
-                // setTimeout(() => fs.unlinkSync(filePath), 5000);
-            }
-        });
+        res.download(filePath);
     } else {
-        res.status(404).send('File not found');
+        res.status(404).send('File not found or expired');
     }
 });
 
-// Endpoint for single reports (Food Allowance)
+// Food Allowance Download (matches index.html href)
 app.get('/download-food-allowance', (req, res) => {
     const fileName = req.query.fileName;
     const filePath = path.join(outputDir, fileName);
     if (fs.existsSync(filePath)) res.download(filePath);
-    else res.status(404).send('File not found');
+    else res.status(404).send('Report not found');
 });
 
-// Periodic cleanup of output folder (deletes files older than 1 hour)
+// Auto-cleanup: Deletes any output files older than 30 minutes
 setInterval(() => {
     const now = Date.now();
-    fs.readdirSync(outputDir).forEach(file => {
-        const filePath = path.join(outputDir, file);
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > 3600000) fs.rmSync(filePath, { recursive: true, force: true });
-    });
-}, 600000);
+    try {
+        fs.readdirSync(outputDir).forEach(file => {
+            const filePath = path.join(outputDir, file);
+            const stats = fs.statSync(filePath);
+            if (now - stats.mtimeMs > 1800000) { 
+                fs.rmSync(filePath, { recursive: true, force: true });
+                console.log(`Cleaned up old file: ${file}`);
+            }
+        });
+    } catch (err) { console.error("Cleanup error:", err); }
+}, 600000); // Runs every 10 minutes
 
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on: http://localhost:${PORT}`);
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
