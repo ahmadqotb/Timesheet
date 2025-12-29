@@ -5,14 +5,13 @@ const fs = require('fs');
 const archiver = require('archiver');
 const TimesheetGenerator = require('./generator');
 const FoodAllowanceCalculator = require('./foodAllowance');
-// Ensure these files exist or keep them commented out
-// const AbsenceReportGenerator = require('./absenceReport'); 
-// const ProjectSummaryGenerator = require('./projectSummary');
+const AbsenceReportGenerator = require('./absenceReport');
+const DataValidator = require('./dataValidator');
+const ProjectSummaryGenerator = require('./projectSummary');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Create necessary directories
 const uploadsDir = path.join(__dirname, 'uploads');
 const outputDir = path.join(__dirname, 'output');
 
@@ -20,151 +19,107 @@ const outputDir = path.join(__dirname, 'output');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadsDir),
     filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
 
-const upload = multer({
-    storage: storage,
-    fileFilter: (req, file, cb) => {
-        if (file.originalname.match(/\.(xlsx|xls)$/)) cb(null, true);
-        else cb(new Error('Only Excel files are allowed!'));
-    }
-});
+const upload = multer({ storage });
 
 app.use(express.static(__dirname));
 
-// Main page
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// Endpoint to get employee names for the checklist
-app.post('/get-employees', upload.single('excel'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const { month, year } = req.body;
-        const generator = new TimesheetGenerator(req.file.path, month, year);
-        await generator.processExcel();
-        const employees = Object.keys(generator.employeeData);
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        res.json({ employees });
-    } catch (error) {
-        console.error('Error fetching employees:', error);
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        res.status(500).json({ error: error.message });
-    }
-});
+// Helper for Progress Streaming
+const createProgressStream = (res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    return (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
 
-// Generate PDFs endpoint
+// 1. PDF GENERATION
 app.post('/generate', upload.single('excel'), async (req, res) => {
-    let requestSubDir = '';
+    let subDir = '';
     try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
         const { month, year } = req.body;
         const satFriEmployees = req.body.satFriEmployees ? JSON.parse(req.body.satFriEmployees) : [];
+        const sendProgress = createProgressStream(res);
 
-        // Unique folder per request prevents users from overwriting each other's files
         const timestamp = Date.now();
-        requestSubDir = path.join(outputDir, `run-${timestamp}`);
-        fs.mkdirSync(requestSubDir, { recursive: true });
-
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        const sendProgress = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-
-        sendProgress({ progress: 5, status: 'Processing Excel file...' });
+        subDir = path.join(outputDir, `run-${timestamp}`);
+        fs.mkdirSync(subDir, { recursive: true });
 
         const generator = new TimesheetGenerator(req.file.path, month, year, satFriEmployees);
-        const employeeCount = await generator.processExcel();
+        const count = await generator.processExcel();
+        
+        await generator.generatePDFs(subDir, (p) => sendProgress(p));
 
-        if (employeeCount === 0) {
-            sendProgress({ error: 'No data found for the selected month/year' });
-            return res.end();
-        }
+        const zipName = `Timesheets_${timestamp}.zip`;
+        const output = fs.createWriteStream(path.join(outputDir, zipName));
+        const archive = archiver('zip');
+        
+        archive.pipe(output);
+        archive.directory(subDir, false);
+        await archive.finalize();
 
-        sendProgress({ progress: 15, status: `Found ${employeeCount} employees. Generating PDFs...` });
-
-        // Generate individual PDFs into the sub-directory
-        await generator.generatePDFs(requestSubDir, (progress) => {
-            sendProgress(progress);
-        });
-
-        // Create ZIP file for the "Download All" feature
-        const zipFileName = `Timesheets_${String(month).padStart(2, '0')}-${year}_${timestamp}.zip`;
-        const zipPath = path.join(outputDir, zipFileName);
-        const output = fs.createWriteStream(zipPath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
-
-        await new Promise((resolve, reject) => {
-            output.on('close', resolve);
-            archive.on('error', reject);
-            archive.pipe(output);
-            archive.directory(requestSubDir, false);
-            archive.finalize();
-        });
-
-        // Cleanup: remove the individual PDFs to save disk space, keep only the ZIP
-        fs.rmSync(requestSubDir, { recursive: true, force: true });
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-
-        sendProgress({
-            progress: 100,
-            status: 'Complete!',
-            complete: true,
-            count: employeeCount,
-            zipFile: zipFileName // index.html uses this to create the download link
-        });
-
+        sendProgress({ progress: 100, status: 'Complete!', complete: true, count, zipFile: zipName });
         res.end();
     } catch (error) {
-        console.error('Generation Crash:', error);
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
         res.end();
+    } finally {
+        if (req.file) fs.unlinkSync(req.file.path);
+        if (subDir) fs.rmSync(subDir, { recursive: true, force: true });
     }
 });
 
-// Generic download endpoint
+// 2. DATA VALIDATOR
+app.post('/validate-data', upload.single('excel'), async (req, res) => {
+    try {
+        const { month, year } = req.body;
+        const validator = new DataValidator(req.file.path, month, year);
+        await validator.process();
+        const fileName = `Validation_Report_${Date.now()}.xlsx`;
+        await validator.generateReport(path.join(outputDir, fileName));
+        res.json({ success: true, fileName });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+    finally { if (req.file) fs.unlinkSync(req.file.path); }
+});
+
+// 3. PROJECT SUMMARY
+app.post('/generate-project-summary', upload.single('excel'), async (req, res) => {
+    try {
+        const { month, year } = req.body;
+        const generator = new ProjectSummaryGenerator(req.file.path, month, year);
+        await generator.loadTimesheetData();
+        const fileName = `Project_Summary_${Date.now()}.xlsx`;
+        await generator.generateExcelReport(path.join(outputDir, fileName));
+        res.json({ success: true, fileName });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+    finally { if (req.file) fs.unlinkSync(req.file.path); }
+});
+
+// DOWNLOADS
 app.get('/download-all', (req, res) => {
-    const fileName = req.query.fileName;
-    if (!fileName) return res.status(400).send('File name required');
-    
-    const filePath = path.join(outputDir, fileName);
-    if (fs.existsSync(filePath)) {
-        res.download(filePath);
-    } else {
-        res.status(404).send('File not found or expired');
-    }
-});
-
-// Food Allowance Download (matches index.html href)
-app.get('/download-food-allowance', (req, res) => {
-    const fileName = req.query.fileName;
-    const filePath = path.join(outputDir, fileName);
+    const filePath = path.join(outputDir, req.query.fileName);
     if (fs.existsSync(filePath)) res.download(filePath);
-    else res.status(404).send('Report not found');
+    else res.status(404).send('File expired');
 });
 
-// Auto-cleanup: Deletes any output files older than 30 minutes
+app.get('/download-food-allowance', (req, res) => {
+    const filePath = path.join(outputDir, req.query.fileName);
+    if (fs.existsSync(filePath)) res.download(filePath);
+    else res.status(404).send('File expired');
+});
+
+// CLEANUP (Every 30 mins)
 setInterval(() => {
     const now = Date.now();
-    try {
-        fs.readdirSync(outputDir).forEach(file => {
-            const filePath = path.join(outputDir, file);
-            const stats = fs.statSync(filePath);
-            if (now - stats.mtimeMs > 1800000) { 
-                fs.rmSync(filePath, { recursive: true, force: true });
-                console.log(`Cleaned up old file: ${file}`);
-            }
-        });
-    } catch (err) { console.error("Cleanup error:", err); }
-}, 600000); // Runs every 10 minutes
+    fs.readdirSync(outputDir).forEach(f => {
+        const p = path.join(outputDir, f);
+        if (now - fs.statSync(p).mtimeMs > 1800000) fs.rmSync(p, { recursive: true, force: true });
+    });
+}, 600000);
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server on port ${PORT}`));
