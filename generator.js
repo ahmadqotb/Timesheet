@@ -441,16 +441,28 @@ class TimesheetGenerator {
             fs.mkdirSync(outputDir, { recursive: true });
         }
 
-const browser = await puppeteer.launch({
+// 1. Define possible paths where Railway/Nixpacks installs Chromium
+        const possiblePaths = [
+            process.env.PUPPETEER_EXECUTABLE_PATH,
+            '/usr/bin/chromium',
+            '/usr/bin/google-chrome',
+            '/usr/bin/chromium-browser'
+        ];
+
+        // 2. Find the first path that actually exists
+        const fs = require('fs');
+        const executablePath = possiblePaths.find(path => path && fs.existsSync(path));
+
+        console.log(`[PDF Generator] Using browser at: ${executablePath || 'NOT FOUND'}`);
+
+        const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+            executablePath: executablePath, 
             args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox', 
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--no-first-run',
-                '--no-zygote',
                 '--single-process'
             ]
         });
