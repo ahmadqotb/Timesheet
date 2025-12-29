@@ -1,9 +1,14 @@
 {
   "name": "employee-timesheet-generator",
   "version": "1.0.0",
+  "description": "Generate employee timesheet PDFs and reports from Excel",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'Build step complete'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "express": "^4.18.2",
