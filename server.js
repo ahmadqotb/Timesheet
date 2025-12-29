@@ -22,8 +22,15 @@ app.use(express.static(__dirname));
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// Stream progress updates to the browser
-const sendSSE = (res, data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+app.post('/get-employees', upload.single('excel'), async (req, res) => {
+    try {
+        const { month, year } = req.body;
+        const generator = new TimesheetGenerator(req.file.path, month, year);
+        await generator.processExcel();
+        res.json({ employees: Object.keys(generator.employeeData) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+    finally { if (req.file) fs.unlinkSync(req.file.path); }
+});
 
 app.post('/generate', upload.single('excel'), async (req, res) => {
     let runDir = '';
@@ -33,7 +40,6 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
 
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
 
         const timestamp = Date.now();
         runDir = path.join(outputDir, `run-${timestamp}`);
@@ -42,23 +48,21 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
         const generator = new TimesheetGenerator(req.file.path, month, year, satFri);
         const count = await generator.processExcel();
 
-        await generator.generatePDFs(runDir, (p) => sendSSE(res, p));
+        await generator.generatePDFs(runDir, (data) => {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        });
 
-        // Create ZIP for Download All
         const zipName = `Timesheets_${timestamp}.zip`;
-        const zipPath = path.join(outputDir, zipName);
-        const output = fs.createWriteStream(zipPath);
+        const output = fs.createWriteStream(path.join(outputDir, zipName));
         const archive = archiver('zip');
-
         archive.pipe(output);
         archive.directory(runDir, false);
         await archive.finalize();
 
-        sendSSE(res, { progress: 100, status: 'Complete!', complete: true, count, zipFile: zipName });
+        res.write(`data: ${JSON.stringify({ progress: 100, status: 'Complete!', complete: true, count, zipFile: zipName })}\n\n`);
         res.end();
-    } catch (error) {
-        console.error(error);
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    } catch (e) {
+        res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
         res.end();
     } finally {
         if (req.file) fs.unlinkSync(req.file.path);
@@ -66,7 +70,6 @@ app.post('/generate', upload.single('excel'), async (req, res) => {
     }
 });
 
-// Validator Endpoint
 app.post('/validate-data', upload.single('excel'), async (req, res) => {
     try {
         const { month, year } = req.body;
@@ -75,31 +78,28 @@ app.post('/validate-data', upload.single('excel'), async (req, res) => {
         const fileName = `Validation_${Date.now()}.xlsx`;
         await validator.generateReport(path.join(outputDir, fileName));
         res.json({ success: true, fileName });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
     finally { if (req.file) fs.unlinkSync(req.file.path); }
 });
 
-// Project Summary Endpoint
 app.post('/generate-project-summary', upload.single('excel'), async (req, res) => {
     try {
         const { month, year } = req.body;
-        const generator = new ProjectSummaryGenerator(req.file.path, month, year);
-        await generator.loadTimesheetData();
+        const gen = new ProjectSummaryGenerator(req.file.path, month, year);
+        await gen.loadTimesheetData();
         const fileName = `Summary_${Date.now()}.xlsx`;
-        await generator.generateExcelReport(path.join(outputDir, fileName));
+        await gen.generateExcelReport(path.join(outputDir, fileName));
         res.json({ success: true, fileName });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
     finally { if (req.file) fs.unlinkSync(req.file.path); }
 });
 
-// Download Route
 app.get(['/download-all', '/download-food-allowance'], (req, res) => {
     const filePath = path.join(outputDir, req.query.fileName);
     if (fs.existsSync(filePath)) res.download(filePath);
     else res.status(404).send('File not found');
 });
 
-// Cleanup Old Files (Every 30 mins)
 setInterval(() => {
     const now = Date.now();
     fs.readdirSync(outputDir).forEach(f => {
@@ -108,4 +108,4 @@ setInterval(() => {
     });
 }, 600000);
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server started on ${PORT}`));
